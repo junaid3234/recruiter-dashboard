@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Recruiter Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+:root {
+  --bg: #0f172a;
+  --card: #020617;
+  --text: #ffffff;
+  --border: #334155;
+  --header: #1e293b;
+}
+
+.light {
+  --bg: #f3f4f6;
+  --card: #ffffff;
+  --text: #111827;
+  --border: #d1d5db;
+  --header: #e5e7eb;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 20px;
+}
+
+button {
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  margin: 4px;
+  font-weight: 500;
+}
+
+.primary { background:#2563eb; color:white; }
+.secondary { background:#475569; color:white; }
+.success { background:#16a34a; color:white; }
+.danger { background:#dc2626; color:white; }
+
+input {
+  padding: 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  width: 250px;
+  background: var(--card);
+  color: var(--text);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+th, td {
+  padding: 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+th {
+  background: var(--header);
+}
+
+.smallcol {
+  width: 30px;
+  text-align: center;
+}
+
+.metrics {
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<h2 id="pageTitle">Active Candidates</h2>
+
+<button id="themeBtn" class="secondary" onclick="toggleTheme()">Light Mode</button>
+
+<div class="metrics">
+  <span id="totalCount">Total Active: 0</span> |
+  <span id="deletedCount">Recently Deleted: 0</span>
+</div>
+
+<div id="topButtons">
+  <button class="primary" onclick="loadCandidates()">Active Candidates</button>
+  <button class="secondary" onclick="loadDeleted()">Recently Deleted</button>
+  <button class="primary" onclick="loadCandidates()">Refresh</button>
+  <button class="success" onclick="exportToExcel()">Export Excel</button>
+  <button class="danger" id="deleteBtn" style="display:none;" onclick="bulkDelete()">Delete Selected</button>
+</div>
+
+<div id="deletedButtons" style="display:none;">
+  <button class="primary" onclick="loadCandidates()">Active Candidates</button>
+  <button class="danger" onclick="permanentDelete()">Delete Selected Permanently</button>
+  <button class="success" onclick="bulkRestore()">Restore Selected</button>
+</div>
+
+<br>
+
+<input type="text" id="searchBox" placeholder="Search candidate..." onkeyup="filterTable()">
+
+<table>
+<thead>
+<tr>
+<th class="smallcol"><input type="checkbox" onclick="toggleAll(this)"></th>
+<th>Name</th>
+<th>Status</th>
+<th>Email</th>
+<th>Phone</th>
+<th>Resume</th>
+<th>Score</th>
+<th>Created</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+
+<script>
+const BASE="https://recruiter-ai-backend.vercel.app";
+let currentMode="active";
+
+/* Theme toggle */
+function toggleTheme(){
+  document.body.classList.toggle("light");
+  const btn=document.getElementById("themeBtn");
+  btn.innerText=document.body.classList.contains("light") ? "Dark Mode" : "Light Mode";
+}
+
+/* Metrics */
+async function updateMetrics(){
+  const activeRes=await fetch(BASE+"/candidates");
+  const activeData=await activeRes.json();
+  document.getElementById("totalCount").innerText="Total Active: "+activeData.length;
+
+  const delRes=await fetch(BASE+"/deleted");
+  const delData=await delRes.json();
+  document.getElementById("deletedCount").innerText="Recently Deleted: "+delData.length;
+}
+
+/* Selection tracking */
+function updateDeleteButton(){
+  const anyChecked=document.querySelectorAll("tbody input:checked").length>0;
+  document.getElementById("deleteBtn").style.display =
+    (anyChecked && currentMode==="active") ? "inline-block" : "none";
+}
+
+function toggleAll(cb){
+  document.querySelectorAll("tbody input").forEach(x=>{
+    x.checked=cb.checked;
+  });
+  updateDeleteButton();
+}
+
+function attachCheckboxListeners(){
+  document.querySelectorAll("tbody input").forEach(cb=>{
+    cb.addEventListener("change", updateDeleteButton);
+  });
+}
+
+/* Load Active */
+async function loadCandidates(){
+  currentMode="active";
+  document.getElementById("pageTitle").innerText="Active Candidates";
+
+  document.getElementById("topButtons").style.display="block";
+  document.getElementById("deletedButtons").style.display="none";
+
+  const res=await fetch(BASE+"/candidates");
+  const data=await res.json();
+  renderActive(data);
+  updateMetrics();
+}
+
+/* Load Deleted */
+async function loadDeleted(){
+  currentMode="deleted";
+  document.getElementById("pageTitle").innerText="Recently Deleted";
+
+  document.getElementById("topButtons").style.display="none";
+  document.getElementById("deletedButtons").style.display="block";
+
+  const res=await fetch(BASE+"/deleted");
+  const data=await res.json();
+  renderDeleted(data);
+  updateMetrics();
+}
+
+/* Render Active */
+function renderActive(data){
+  const body=document.getElementById("tableBody");
+  body.innerHTML="";
+
+  data.forEach(c=>{
+    const row=document.createElement("tr");
+    row.innerHTML=`
+      <td class="smallcol"><input type="checkbox" value="${c.id}"></td>
+      <td>${c.name||""}</td>
+      <td>${c.status||""}</td>
+      <td>${c.email||""}</td>
+      <td>${c.phone||""}</td>
+      <td>${c.resume_url?`<a href="${c.resume_url}" target="_blank">Open</a>`:"N/A"}</td>
+      <td>${c.score||0}</td>
+      <td>${new Date(c.created_at).toLocaleString(undefined,{hour12:true})}</td>
+    `;
+    body.appendChild(row);
+  });
+
+  attachCheckboxListeners();
+}
+
+/* Render Deleted */
+function renderDeleted(data){
+  const body=document.getElementById("tableBody");
+  body.innerHTML="";
+
+  data.forEach(c=>{
+    const row=document.createElement("tr");
+    row.innerHTML=`
+      <td class="smallcol"><input type="checkbox" value="${c.id}"></td>
+      <td>${c.name||""}</td>
+      <td>${c.status||""}</td>
+      <td>${c.email||""}</td>
+      <td>${c.phone||""}</td>
+      <td>${c.resume_url?`<a href="${c.resume_url}" target="_blank">Open</a>`:"N/A"}</td>
+      <td>${c.score||0}</td>
+      <td>${new Date(c.created_at).toLocaleString(undefined,{hour12:true})}</td>
+    `;
+    body.appendChild(row);
+  });
+
+  attachCheckboxListeners();
+}
+
+/* Bulk Delete */
+async function bulkDelete(){
+  const ids=getSelected();
+  if(ids.length===0)return;
+
+  await fetch(BASE+"/delete",{
+    method:"DELETE",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ids})
+  });
+
+  loadCandidates();
+}
+
+/* Restore */
+async function bulkRestore(){
+  const ids=getSelected();
+  if(ids.length===0)return;
+
+  await fetch(BASE+"/restore",{
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ids})
+  });
+
+  loadDeleted();
+}
+
+/* Permanent Delete */
+async function permanentDelete(){
+  const ids=getSelected();
+  if(ids.length===0)return;
+
+  await fetch(BASE+"/permanent",{
+    method:"DELETE",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ids})
+  });
+
+  loadDeleted();
+}
+
+function getSelected(){
+  return Array.from(document.querySelectorAll("tbody input:checked"))
+    .map(cb=>cb.value);
+}
+
+function filterTable(){
+  const input=document.getElementById("searchBox").value.toLowerCase();
+  document.querySelectorAll("#tableBody tr").forEach(row=>{
+    row.style.display=row.innerText.toLowerCase().includes(input)?"":"none";
+  });
+}
+
+function exportToExcel(){
+  const table=document.querySelector("table");
+  const workbook=XLSX.utils.table_to_book(table,{sheet:"Candidates"});
+  XLSX.writeFile(workbook,"candidates.xlsx");
+}
+
+loadCandidates();
+</script>
+
+</body>
+</html>
