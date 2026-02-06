@@ -298,9 +298,37 @@ function filterTable(){
 }
 
 function exportToExcel(){
-  const table=document.querySelector("table");
-  const workbook=XLSX.utils.table_to_book(table,{sheet:"Candidates"});
-  XLSX.writeFile(workbook,"candidates.xlsx");
+
+const rows = document.querySelectorAll("#tableBody tr");
+const selectedRows = [];
+
+rows.forEach(row => {
+  const checkbox = row.querySelector("input[type='checkbox']");
+  if (checkbox && checkbox.checked) {
+    selectedRows.push(row.cloneNode(true));
+  }
+});
+
+let table;
+
+if (selectedRows.length > 0) {
+  // Create temporary table for selected rows
+  table = document.createElement("table");
+
+  const header = document.querySelector("thead").cloneNode(true);
+  table.appendChild(header);
+
+  const tbody = document.createElement("tbody");
+  selectedRows.forEach(r => tbody.appendChild(r));
+  table.appendChild(tbody);
+
+} else {
+  // Export full table
+  table = document.querySelector("table");
+}
+
+const workbook = XLSX.utils.table_to_book(table, { sheet: "Candidates" });
+XLSX.writeFile(workbook, "candidates.xlsx");
 }
 
 loadCandidates();
