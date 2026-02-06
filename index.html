@@ -207,7 +207,14 @@ function renderActive(data){
     row.innerHTML=`
       <td class="smallcol"><input type="checkbox" value="${c.id}"></td>
       <td>${c.name||""}</td>
-      <td>${c.status||""}</td>
+      <td>
+        <select onchange="updateStatus('${c.id}',this.value)">
+          <option value="New" ${c.status==="New"?"selected":""}>New</option>
+          <option value="Shortlisted" ${c.status==="Shortlisted"?"selected":""}>Shortlisted</option>
+          <option value="Interview" ${c.status==="Interview"?"selected":""}>Interview</option>
+          <option value="Rejected" ${c.status==="Rejected"?"selected":""}>Rejected</option>
+        </select>
+      </td>
       <td>${c.email||""}</td>
       <td>${c.phone||""}</td>
       <td>${c.resume_url?`<a href="${c.resume_url}" target="_blank">Open</a>`:"N/A"}</td>
@@ -290,6 +297,15 @@ function getSelected(){
     .map(cb=>cb.value);
 }
 
+/* STATUS UPDATE FUNCTION ADDED HERE */
+async function updateStatus(id,status){
+  await fetch(BASE+"/status/"+id,{
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({status})
+  });
+}
+
 function filterTable(){
   const input=document.getElementById("searchBox").value.toLowerCase();
   document.querySelectorAll("#tableBody tr").forEach(row=>{
@@ -312,7 +328,6 @@ rows.forEach(row => {
 let table;
 
 if (selectedRows.length > 0) {
-  // Create temporary table for selected rows
   table = document.createElement("table");
 
   const header = document.querySelector("thead").cloneNode(true);
@@ -323,7 +338,6 @@ if (selectedRows.length > 0) {
   table.appendChild(tbody);
 
 } else {
-  // Export full table
   table = document.querySelector("table");
 }
 
